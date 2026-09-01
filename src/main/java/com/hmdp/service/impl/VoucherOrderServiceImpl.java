@@ -9,6 +9,7 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -41,8 +42,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private SimpleRedisLock simpleRedisLock;
+
     @Override
     @Transactional
+    //秒杀优惠券
     public Result seckillVoucher(Long voucherId) {
         //获取当前登录用户（必须在任何可能提前返回的逻辑之前获取）
         Long userId = UserHolder.getUser().getId();
@@ -73,6 +78,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if (!isLock) {
             return Result.fail("不允许重复下单");
         }
+
         try {
             //数据库层面校验一人一单，防止该用户历史重复下单（事务内校验+插入，保证原子性）
             int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
@@ -90,25 +96,37 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                 return Result.fail("库存不足");
             }
 
-            //创建订单（与扣库存在同一事务中，要么同时成功，要么同时回滚）
-            VoucherOrder voucherOrder = new VoucherOrder();
-            //设置订单信息
-            //获取订单id（全局唯一id）
-            long orderId = redisIdWorker.nextId("order");
-            voucherOrder.setId(orderId);
-            //用户id
-            voucherOrder.setUserId(userId);
-            //代金券id
-            voucherOrder.setVoucherId(voucherId);
-            //保存订单
-            save(voucherOrder);
+            //创建订单
+            Long orderId = createOrder(userId, voucherId);;
 
             //返回订单id
             return Result.ok(orderId);
         } finally {
             //释放分布式锁（只释放本线程刚加的锁）
-            unlock(lockKey);
+            simpleRedisLock.unlock();
         }
+    }
+
+    /**
+     * 创建秒杀订单
+     * @param userId 用户ID
+     * @param voucherId 优惠券ID
+     * @return 订单ID
+     */
+    private Long createOrder(Long userId, Long voucherId) {
+
+        VoucherOrder voucherOrder = new VoucherOrder();
+        //获取订单id（全局唯一id）
+        long orderId = redisIdWorker.nextId("order");
+        voucherOrder.setId(orderId);
+        //用户id
+        voucherOrder.setUserId(userId);
+        //代金券id
+        voucherOrder.setVoucherId(voucherId);
+        //保存订单
+        save(voucherOrder);
+
+        return orderId;
     }
 
     //尝试获取分布式锁（原子性加锁，带过期时间防止死锁）
@@ -117,8 +135,5 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         return BooleanUtil.isTrue(flag);
     }
 
-    //释放分布式锁（只释放本线程刚加的锁）
-    private void unlock(String key) {
-        stringRedisTemplate.delete(key);
-    }
+
 }
