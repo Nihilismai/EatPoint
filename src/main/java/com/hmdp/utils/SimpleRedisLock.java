@@ -4,23 +4,31 @@ import cn.hutool.core.lang.UUID;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
+
 public class SimpleRedisLock implements ILock {
 
+    // 锁的名称
     private String name;
+    // 操作Redis的模板
     private StringRedisTemplate stringRedisTemplate;
 
+    // 创建锁实例
     public SimpleRedisLock(String name, StringRedisTemplate stringRedisTemplate) {
         this.name = name;
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
+    // 定义锁的key前缀
     private static final String KEY_PREFIX = "lock:";
+    // 定义锁的值前缀
     private static final String ID_PREFIX = UUID.randomUUID().toString(true) + "-";
 
+    // 定义lua脚本
     private static final DefaultRedisScript<Long> UNLOCK_SCRIPT;
     static {
         UNLOCK_SCRIPT = new DefaultRedisScript<>();
@@ -28,6 +36,7 @@ public class SimpleRedisLock implements ILock {
         UNLOCK_SCRIPT.setResultType(Long.class);
     }
 
+    // 尝试获取锁
     @Override
     public boolean tryLock(long timeoutSec) {
         // 获取线程标示
@@ -38,6 +47,7 @@ public class SimpleRedisLock implements ILock {
         return Boolean.TRUE.equals(success);
     }
 
+    // 释放锁
     @Override
     public void unlock() {
         // 调用lua脚本

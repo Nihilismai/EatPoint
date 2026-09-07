@@ -39,6 +39,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    //发送验证码
     @Override
     public Result sendCode(String phone, HttpSession session) {
         //校验手机号
@@ -57,6 +58,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     }
 
+    //登录
     @Override
     public Result login(LoginFormDTO loginForm, HttpSession session) {
         String phone = loginForm.getPhone();
@@ -101,6 +103,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         return Result.ok(token);
     }
 
+    //根据手机号创建用户
     private User createUserWithPhone(String phone) {
         User user = new User();
         user.setPhone(phone);
