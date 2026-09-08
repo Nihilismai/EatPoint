@@ -91,5 +91,11 @@ public class Blog implements Serializable {
      */
     private LocalDateTime updateTime;
 
+    /**
+     * 是否点赞
+     */
+    @TableField(exist = false)
+    private String shopName;
+
 
 }
