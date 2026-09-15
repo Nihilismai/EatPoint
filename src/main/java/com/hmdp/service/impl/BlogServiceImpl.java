@@ -169,7 +169,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         List<Follow> fans = followService.query().eq("follow_user_id", user.getId()).list();
         //推送笔记id给所有粉丝
         fans.forEach(fan -> {
-            stringRedisTemplate.opsForZSet().add("feed:" + blog.getId(), blog.getId().toString(), System.currentTimeMillis());
+            stringRedisTemplate.opsForZSet().add("feed:" + fan.getUserId(), blog.getId().toString(), System.currentTimeMillis());
         });
 
 
@@ -195,16 +195,19 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         List<Long> ids = new ArrayList<>(typedTuples.size());
         long minTime = 0;
         int os = 1;
+        boolean first = true;
         for (ZSetOperations.TypedTuple<String> tuple : typedTuples) {
-            //获取id
             ids.add(Long.valueOf(tuple.getValue()));
-            //获取分数（时间戳）
             long time = tuple.getScore().longValue();
-            if (time < minTime) {
-                minTime = time;
-                os = 1;
+
+            if (first) {
+                minTime = time;   // 第一条，初始化
+                first = false;
             } else if (time == minTime) {
                 os++;
+            } else {
+                minTime = time;
+                os = 1;
             }
         }
         //根据id查询blog
