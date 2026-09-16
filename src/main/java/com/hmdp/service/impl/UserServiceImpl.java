@@ -12,13 +12,18 @@ import com.hmdp.entity.User;
 import com.hmdp.mapper.UserMapper;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.UserHolder;
 import org.springframework.beans.BeanUtils;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -101,6 +106,59 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
 
         return Result.ok(token);
+    }
+
+    @Override
+    public Result sign() {
+        //获取当前登录用户
+        UserDTO user = UserHolder.getUser();
+        Long userId = user.getId();
+        //获取日期
+        LocalDate now = LocalDate.now();
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY + userId + keySuffix;
+        int dayOfMonth = now.getDayOfMonth();
+        //写入redis
+        stringRedisTemplate.opsForValue().setBit(key, dayOfMonth - 1, true);
+        return Result.ok();
+
+    }
+
+    @Override
+    public Result signCount() {
+        //获取本月截至今天的签到天数
+        UserDTO user = UserHolder.getUser();
+        Long userId = user.getId();
+        LocalDate now = LocalDate.now();
+        String keySuffix = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = USER_SIGN_KEY + userId + keySuffix;
+        int dayOfMonth = now.getDayOfMonth();
+        //获取本月截至今天的所有签到记录
+        List<Long> result = stringRedisTemplate.opsForValue()
+                .bitField(key,
+                        BitFieldSubCommands.create()
+                                .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0)
+                );
+        //判断结果是否为空
+        if (result == null || result.isEmpty()) {
+            return Result.ok(0);
+        }
+        long signCount = result.get(0);
+        if(signCount == 0){
+            return Result.ok(0);
+        }
+        //计算签到天数
+        int count = 0;
+        while(true){
+            if((signCount & 1) == 0){
+                break;
+            }else{
+                count++;
+                signCount >>= 1;
+            }
+        }
+        //返回结果
+        return Result.ok(result.get(0));
     }
 
     //根据手机号创建用户
